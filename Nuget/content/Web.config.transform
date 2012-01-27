@@ -1,0 +1,19 @@
+<configuration>
+  <configSections>
+    <section name="LogsAnalyserSettings" type="Eila.HttpHandler.LogsAnalyserSettings, Eila.HttpHandler, Version=1.0.0.0, Culture=neutral"/>
+  </configSections>
+
+  <LogsAnalyserSettings resultPath="[Your path to processed files]" />
+  
+  <system.web>   
+    <httpHandlers>
+      <add verb="*" path="iis.axd" validate="false" type="Eila.HttpHandler.LogsAnalyserHandler"/>
+    </httpHandlers>  
+  </system.web>
+
+  <system.webServer>    
+    <handlers>
+      <add verb="*" path="iis.axd" name="LogAnalyser"  type="Eila.HttpHandler.LogsAnalyserHandler"/>
+    </handlers>
+  </system.webServer> 
+</configuration>

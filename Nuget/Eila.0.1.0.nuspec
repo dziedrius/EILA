@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
+  <metadata>
+    <version>0.1.0</version>
+    <authors>Giedrius Banaitis</authors>
+    <owners />
+    <licenseUrl>http://www.opensource.org/licenses/MIT</licenseUrl>
+    <projectUrl>https://github.com/dziedrius/EILA</projectUrl>
+    <id>Eila</id>
+    <title />
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>HttpHandler for showing analysed IIS logs summary as a web page. Idea is this: you schedule Eila.Analyser to press your IIS logs, then add Eila.HttpHandler to your website and you have a page, where you can view charts and access data in csv format from IIS logs analysis.</description>
+    <language>en-US</language>
+    <tags>log analysis, IIS, ASP.NET, ASP.NET MVC</tags>
+  </metadata>
+  <files>
+    <file src="content\Web.config.transform" target="content\Web.config.transform" />
+    <file src="..\Eila.HttpHandler\bin\Release\Eila.HttpHandler.dll" target="lib\net40\Eila.HttpHandler.dll" />
+  </files>
+</package>
