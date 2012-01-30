@@ -3,37 +3,31 @@ using System.Collections.Generic;
 using System.Configuration;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Web;
+using Eila.HttpHandler.Model;
+using Eila.HttpHandler.Properties;
+using Nustache.Core;
 
 namespace Eila.HttpHandler
 {
     public class LogsAnalyserHandler : IHttpHandler
     {
+        static LogsAnalyserHandler()
+        {
+            AppDomain.CurrentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;            
+        }
+
         public bool IsReusable
         {
             get { return false; }
         }
 
         public void ProcessRequest(HttpContext context)
-        {       
-            if (LogsAnalyserSettings.Settings == null)
-            {
-                throw new ConfigurationErrorsException("Missing LogsAnalyserSettings config section!");
-            }
-
-            var resultPath = LogsAnalyserSettings.Settings.ResultPath;
-            if (!Directory.Exists(resultPath))
-            {
-                throw new ConfigurationErrorsException(string.Format("{0} path does not exist.", resultPath));
-            }
-
+        {
+            var resultPath = ValidateConfiguration();
             var sites = Directory.GetDirectories(resultPath);
-
-            if (!string.IsNullOrEmpty(LogsAnalyserSettings.Settings.SitesToInclude))
-            {
-                var sitesToInclude = LogsAnalyserSettings.Settings.SitesToInclude.Split(";,".ToCharArray());
-                sites = sites.Where(sitesToInclude.Contains).ToArray();
-            }
+            sites = FilterSites(sites);
 
             var site = Path.GetFileName(sites.First());
 
@@ -67,65 +61,114 @@ namespace Eila.HttpHandler
                 context.Response.AddHeader("Content-Disposition", string.Format("attachment;filename={0}.csv", fileName));
                 context.Response.BinaryWrite(fileBytes);
                 return;
-            }           
+            }
 
-            context.Response.Write("<table border='1'><tr><td style='vertical-align:top'>");
-            WriteMenu(context, sites);
-            context.Response.Write("</td><td>");           
+            var template = Resources.template;
 
-            WriteAnalysis(context, resultPath, site, date);
-            context.Response.Write("</td></tr></table>");
+            var resultsView = new ResultsView
+                                  {
+                                      Sites = GetSitesMenu(sites, context.Request.Url),
+                                      DateItem = GetDateItem(resultPath, site, date, context.Request.Url)
+                                  };
 
-            context.Response.Write("<html><body>");
-            
-            context.Response.Write("</body></html>");
-        }   
+            var html = Render.StringToString(template, resultsView);
+            context.Response.Write(html);         
+        }
 
-        private static void WriteMenu(HttpContext context, IEnumerable<string> sites)
+        static Assembly CurrentDomain_AssemblyResolve(object sender, ResolveEventArgs args)
         {
-            context.Response.Write("<ul>");
+            var resourceName = "Eila.HttpHandler." + new AssemblyName(args.Name).Name + ".dll";
 
+            using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName))
+            {
+                var assemblyData = new Byte[stream.Length];
+                stream.Read(assemblyData, 0, assemblyData.Length);
+
+                return Assembly.Load(assemblyData);
+            }
+        }
+
+        private static string[] FilterSites(string[] sites)
+        {
+            if (!string.IsNullOrEmpty(LogsAnalyserSettings.Settings.SitesToInclude))
+            {
+                var sitesToInclude = LogsAnalyserSettings.Settings.SitesToInclude.Split(";,".ToCharArray());
+                sites = sites.Where(sitesToInclude.Contains).ToArray();
+            }
+            return sites;
+        }
+
+        private static string ValidateConfiguration()
+        {
+            if (LogsAnalyserSettings.Settings == null)
+            {
+                throw new ConfigurationErrorsException("Missing LogsAnalyserSettings config section!");
+            }
+
+            var resultPath = LogsAnalyserSettings.Settings.ResultPath;
+            if (!Directory.Exists(resultPath))
+            {
+                throw new ConfigurationErrorsException(string.Format("{0} path does not exist.", resultPath));
+            }
+            return resultPath;
+        }
+
+        private DateItemView GetDateItem(string resultPath, string site, string date, Uri requestUrl)
+        {
+            var dateItemView = new DateItemView
+                                   {
+                                       Site = site, 
+                                       Date = date
+                                   };
+
+
+            var combinedPath = Path.Combine(resultPath, Path.Combine(site, date));
+
+            if (!Directory.Exists(combinedPath))
+            {
+                return dateItemView;
+            }
+
+            var separator = requestUrl.PathAndQuery.Contains('?') ? "&" : "?";
+
+            dateItemView.QueryViews = Directory.GetFiles(combinedPath, "*.png").Select(file => new QueryView
+                                                                                              {
+                                                                                                  QueryName = Path.GetFileNameWithoutExtension(file),
+                                                                                                  ImageFilePath = string.Format("{0}{2}image={1}", requestUrl, Path.GetFileName(file), separator),
+                                                                                                  CsvFilePath = string.Format("{0}{2}file={1}.csv", requestUrl, Path.GetFileNameWithoutExtension(file), separator)
+                                                                                              }).ToList();
+
+            return dateItemView;
+        }
+
+        private List<SiteView> GetSitesMenu(IEnumerable<string> sites, Uri requestUrl)
+        {
+            var list = new List<SiteView>();
             foreach (var siteDirectory in sites)
             {
                 var siteName = Path.GetFileName(siteDirectory);
-                context.Response.Write(string.Format("<li>{0}<ul>", siteName));
+                Func<string, DateView> selector = date =>
+                                    {
+                                        var dateName = Path.GetFileName(date);
+                                        var link = string.Format("{1}?site={2}&date={0}", dateName, requestUrl.GetLeftPart(UriPartial.Path), siteName);
+                                        return new DateView
+                                                   {
+                                                       Name = dateName, Link = link
+                                                   };
+                                    };
 
-                foreach (var date in Directory.GetDirectories(siteDirectory))
-                {
-                    var dateName = Path.GetFileName(date);
-                    context.Response.Write(string.Format(
-                        "<li><a href='{1}?site={2}&date={0}'>{0}</a></li>",
-                        dateName,
-                        context.Request.Url.GetLeftPart(UriPartial.Path), 
-                        siteName));
-                }
+                var siteView = new SiteView
+                                   {
+                                       SiteName = siteName,
+                                       Dates = Directory.GetDirectories(siteDirectory)
+                                           .Select(selector)
+                                           .ToList()
+                                   };
 
-                context.Response.Write("</ul></li>");
+                list.Add(siteView);
             }
 
-            context.Response.Write("</ul>");
-        }
-
-        private void WriteAnalysis(HttpContext context, string resultPath, string site, string date)
-        {
-            context.Response.Write(string.Format("<h1>{0}, {1}</h1>", site, date));
-            var combine = Path.Combine(resultPath, Path.Combine(site, date));
-
-            if (!Directory.Exists(combine))
-            {
-                return;
-            }
-
-            context.Response.Write("<table>");
-
-            foreach (var file in Directory.GetFiles(combine, "*.png"))
-            {
-                var separator = context.Request.Url.PathAndQuery.Contains('?') ? "&" : "?";
-                context.Response.Write(string.Format("<tr><td><a href='{0}{2}image={1}'><img src='{0}{2}image={1}' style='max-width:300px' /></a></td>", context.Request.Url, Path.GetFileName(file), separator));
-                context.Response.Write(string.Format("<td><a href='{0}{2}file={1}.csv'>{1}.csv</a></td></tr>", context.Request.Url, Path.GetFileNameWithoutExtension(file), separator));
-            }
-
-            context.Response.Write("</table>");
+            return list;
         }      
     }
 }

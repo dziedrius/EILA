@@ -1,0 +1,45 @@
+<html>
+<head>
+    <title>IIS Log Analysis</title>
+    <style type="text/css">        
+        table {
+            width: 100%
+        }
+        td.left-border 
+        {            
+            border-left: 1px solid black;
+        }              
+        
+        ul.results li {
+            display: inline;
+        }
+    </style>
+</head>
+<body>
+    <table>
+        <tr>
+            <td>
+                {{#Sites}} {{SiteName}}
+                <ul>
+                    {{#Dates}}<li><a href="{{Link}}">{{Name}}</a></li>{{/Dates}}
+                </ul>
+                {{/Sites}}
+            </td>
+            <td class="left-border">
+                {{#DateItem}}
+                <h3>
+                    {{Date}}, {{Site}}</h3>
+                <ul class="results">
+                    {{#QueryViews}}
+                    <li>{{QueryName}}<br />
+                        <a href="{{ImageFilePath}}">
+                            <img src="{{ImageFilePath}}" style="max-height: 300px" /></a><br />
+                        <a href="{{CsvFilePath}}">{{QueryName}}.csv</a></li>
+                    {{/QueryViews}}
+                </ul>
+                {{/DateItem}}
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
